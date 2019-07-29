@@ -7,5 +7,5 @@ Quickstart
 ----------
 
 Start with `Empty()` or using `make_schema()` and merge with json-like python objects using `+=`
-Visualize the resulting schema with `dumps()`
+Visualize the resulting schema with `dumps()` or by priting the object,
 Get a sense of the overall structure with `statistics()`

@@ -1,11 +1,12 @@
 [tool.poetry]
 name = "json-schema-discovery"
-version = "0.1.0"
+version = "1.0.0"
 description = "Database-agnostic JSON schema discovery"
 authors = ["Stepland <Stepland@hotmail.fr>"]
 
 [tool.poetry.dependencies]
 python = "^3.7"
+tabulate = "^0.8.3"
 
 [tool.poetry.dev-dependencies]
 pytest = "^3.0"

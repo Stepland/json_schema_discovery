@@ -2,7 +2,7 @@ import copy
 from abc import ABC, abstractmethod
 
 
-class Mergeable(ABC):
+class Schema(ABC):
 
     """Base class for mergable schemas"""
 
@@ -17,11 +17,23 @@ class Mergeable(ABC):
 
     @property
     @abstractmethod
+    def count(self):
+        ...
+
+    @property
+    @abstractmethod
     def short_type_str(self):
         ...
 
+    def _iter_statistics(self, depth=1):
+        return []
+
+    def _iter_sub_statistics(self, depth=1):
+        for key, *info in self._iter_statistics(depth=depth - 1):
+            yield (f"    {key}", *info)
+
     def __iadd__(self, other):
-        if not isinstance(other, Mergeable):
+        if not isinstance(other, Schema):
             try:
                 other = make_schema(other)
             except ValueError:
@@ -32,23 +44,27 @@ class Mergeable(ABC):
         return "\n".join(self._iter_strings(indent=1, show_counts=True))
 
 
-class Countable:
+class CountableSchema(Schema):
 
     """
-    Base class for schemas where direct occurence counting makes sense,
+    Schemas where direct occurence counting makes sense,
 
     For instance Empty and Variant are not countable since they do not reflect actual json structures
     """
 
     def __init__(self):
-        self.count = 1
+        self._count = 1
+
+    @property
+    def count(self):
+        return self._count
 
     def add_counts(self, other):
-        if isinstance(other, Countable):
-            self.count += other.count
+        if isinstance(other, CountableSchema):
+            self._count += other._count
 
 
-class Empty(Mergeable):
+class Empty(Schema):
 
     """
     The empty structure, to be understood as "no schema can be inferred for now"
@@ -81,7 +97,7 @@ class Empty(Mergeable):
         return str(self)
 
 
-class Value(Mergeable, Countable):
+class Value(CountableSchema):
 
     """
     Scalar Json value, either a number (int or float), a string, a boolean or null (None)
@@ -119,7 +135,7 @@ class Value(Mergeable, Countable):
         return self.type.__name__
 
 
-class DictStructure(Mergeable, Countable):
+class DictStructure(CountableSchema):
 
     """
     JSON Object structure
@@ -178,7 +194,6 @@ class DictStructure(Mergeable, Countable):
                 lines = self[key]._iter_strings(indent=indent, show_counts=show_counts)
                 yield " " * indent + f"{key} : {next(lines)}"
                 line = next(lines, None)
-                next_line = None
                 for next_line in lines:
                     yield " " * indent * 2 + line
                     line = next_line
@@ -186,12 +201,23 @@ class DictStructure(Mergeable, Countable):
                     yield " " * indent + line
             yield "}"
 
+    def _iter_statistics(self, depth=1):
+
+        if depth <= 0:
+            return
+
+        counts = list(self.keys.items())
+        counts.sort(key=lambda x: (-x[1].count, x[0]))
+        for key, value in counts:
+            yield key, value.short_type_str, value.count, value.count / self.count * 100
+            yield from value._iter_sub_statistics(depth=depth)
+
     @property
     def short_type_str(self):
         return "dict"
 
 
-class ListStructure(Mergeable, Countable):
+class ListStructure(CountableSchema):
 
     """
     JSON Array structure
@@ -237,12 +263,26 @@ class ListStructure(Mergeable, Countable):
                 yield " " * indent + line
             yield "]"
 
+    def _iter_statistics(self, depth=1):
+
+        if depth <= 0:
+            return
+
+        yield f"[{self.element_schema.count}]", self.element_schema.short_type_str
+        yield from self.element_schema._iter_sub_statistics(depth=depth)
+
+    def _iter_sub_statistics(self, depth=1):
+        if depth <= 0:
+            return
+        for key, *info in self._iter_statistics(depth=depth - 1):
+            yield (f"    {key}", *info)
+
     @property
     def short_type_str(self):
         return "list"
 
 
-class Variant(Mergeable):
+class Variant(Schema):
 
     """
     Represents an alternative between otherwise non-mergable structures
@@ -328,6 +368,14 @@ class Variant(Mergeable):
                     yield " " * indent + line
             yield ")"
 
+    def _iter_statistics(self, depth=1):
+
+        if depth <= 0:
+            return
+        for schema in self:
+            yield f"<{schema.short_type_str}>", schema.short_type_str, schema.count, schema.count / self.count * 100
+            yield from schema._iter_sub_statistics(depth=depth)
+
     @property
     def short_type_str(self):
         return f'Variant({", ".join(x.short_type_str for x in self)})'
@@ -341,7 +389,7 @@ def make_schema(obj):
     Send the object back if it's already a schema
     """
 
-    if not isinstance(obj, Mergeable):
+    if not isinstance(obj, Schema):
         if isinstance(obj, dict):
             return DictStructure(obj)
         elif isinstance(obj, list):
@@ -359,4 +407,3 @@ def _count(s, show_counts=True):
     if show_counts:
         res += f"{s.count}×"
     return res
-
