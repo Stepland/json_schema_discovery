@@ -206,11 +206,13 @@ class DictStructure(CountableSchema):
         if depth <= 0:
             return
 
-        counts = list(self.keys.items())
-        counts.sort(key=lambda x: (-x[1].count, x[0]))
-        for key, value in counts:
+        for key, value in DictStructure.statistic_sorting(self.keys):
             yield key, value.short_type_str, value.count, value.count / self.count * 100
             yield from value._iter_sub_statistics(depth=depth)
+
+    @staticmethod
+    def statistic_sorting(_dict):
+        return sorted(_dict.items(), key=lambda x: (-x[1].count, x[0]))
 
     @property
     def short_type_str(self):

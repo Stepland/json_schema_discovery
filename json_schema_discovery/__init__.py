@@ -16,7 +16,7 @@ def dumps(s: Schema, indent=1, show_counts=True):
 
 
 def statistics(s: Schema, **kwargs):
-    """Get the frequencies of first level keys of a DictStructure"""
+    """Get some statistics regarding type and frequencies of keys"""
 
     print(
         tabulate.tabulate(
