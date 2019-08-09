@@ -48,6 +48,20 @@ class Schema(ABC):
     def _iter_sub_statistics(self, depth=1):
         for key, *info in self._iter_statistics(depth=depth - 1):
             yield (f"    {key}", *info)
+    
+    def statistics(self, **kwargs):
+        """Get detailed statistics regarding type and frequencies"""
+        print(
+            tabulate.tabulate(
+                list(self._iter_statistics(**kwargs)),
+                headers=["path", "type", "occurences", "%"],
+                floatfmt=".3f",
+            )
+        )
+    
+    def dumps(self, indent=1, show_counts=True):
+        """Dump structure as a string"""
+        return "\n".join(self._iter_strings(indent=indent, show_counts=show_counts))
 
     def __iadd__(self, other):
         if not isinstance(other, Schema):
@@ -59,6 +73,9 @@ class Schema(ABC):
 
     def __str__(self):
         return "\n".join(self._iter_strings(indent=1, show_counts=True))
+    
+    def __repr__(self):
+        return self.short_type_str
 
 class CountableSchema(Schema):
 
@@ -422,19 +439,3 @@ def _count(s, show_counts=True):
     if show_counts:
         res += f"{s.count}×"
     return res
-
-def dumps(s: Schema, indent=1, show_counts=True):
-    """Dump structure as a string"""
-    return "\n".join(s._iter_strings(indent=indent, show_counts=show_counts))
-
-
-def statistics(s: Schema, **kwargs):
-    """Get some statistics regarding type and frequencies of keys"""
-
-    print(
-        tabulate.tabulate(
-            list(s._iter_statistics(**kwargs)),
-            headers=["path", "type", "occurences", "%"],
-            floatfmt=".3f",
-        )
-    )
