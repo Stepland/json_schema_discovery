@@ -16,10 +16,6 @@ class Schema(ABC):
     """Base class for mergable schemas"""
 
     @abstractmethod
-    def _merge(self, other):
-        ...
-
-    @abstractmethod
     def _iter_strings(self, indent=1, show_counts=True):
         """Iterate over the lines of the long string representation"""
         ...
@@ -33,6 +29,18 @@ class Schema(ABC):
     @abstractmethod
     def short_type_str(self):
         ...
+    
+    @abstractmethod
+    def _merge(self, other):
+        ...
+    
+    def _merge_any(self, other):
+        if isinstance(other, Empty):
+            return self
+        elif not isinstance(other, type(self)):
+            return Variant((self, other))
+        else:
+            return self._merge(other)
 
     def _iter_statistics(self, depth=1):
         return []
@@ -47,11 +55,10 @@ class Schema(ABC):
                 other = make_schema(other)
             except ValueError:
                 return NotImplemented
-        return self._merge(other)
+        return self._merge_any(other)
 
     def __str__(self):
         return "\n".join(self._iter_strings(indent=1, show_counts=True))
-
 
 class CountableSchema(Schema):
 
@@ -95,8 +102,11 @@ class Empty(Schema):
     def count(self):
         return 0
 
-    def _merge(self, other):
+    def _merge_any(self, other):
         return copy.copy(other)
+    
+    def _merge(self, other):
+        ...
 
     def _iter_strings(self, indent=1, show_counts=True):
         yield "<empty>"
@@ -130,11 +140,8 @@ class Value(CountableSchema):
         return True
 
     def _merge(self, other):
-        if self != other:
-            return Variant((self, other))
-        else:
-            self.add_counts(other)
-            return self
+        self.add_counts(other)
+        return self
 
     def _iter_strings(self, indent=1, show_counts=True):
         yield _count(self, show_counts) + self.type.__name__
@@ -181,18 +188,15 @@ class DictStructure(CountableSchema):
         return bool(self.keys)
 
     def _merge(self, other):
-        if not isinstance(other, DictStructure):
-            return Variant((self, other))
-        else:
-            res = copy.copy(self)
-            res.add_counts(other)
-            # merge each common key
-            for key in res.keys.keys() & other.keys.keys():
-                res[key] += other[key]
-            # add each new key
-            for key in other.keys.keys() - res.keys.keys():
-                res[key] = copy.copy(other[key])
-            return res
+        res = copy.copy(self)
+        res.add_counts(other)
+        # merge each common key
+        for key in res.keys.keys() & other.keys.keys():
+            res[key] += other[key]
+        # add each new key
+        for key in other.keys.keys() - res.keys.keys():
+            res[key] = copy.copy(other[key])
+        return res
 
     def _iter_strings(self, indent=1, show_counts=True):
         if not (self):
@@ -255,13 +259,10 @@ class ListStructure(CountableSchema):
         return bool(self.element_schema)
 
     def _merge(self, other):
-        if not isinstance(other, ListStructure):
-            return Variant((self, other))
-        else:
-            res = copy.copy(self)
-            res.add_counts(other)
-            res.element_schema += other.element_schema
-            return res
+        res = copy.copy(self)
+        res.add_counts(other)
+        res.element_schema += other.element_schema
+        return res
 
     def _iter_strings(self, indent=1, show_counts=True):
         if not (self):
@@ -341,8 +342,11 @@ class Variant(Schema):
     @property
     def count(self):
         return sum(x.count for x in self)
-
+    
     def _merge(self, other):
+        ...
+
+    def _merge_any(self, other):
         if isinstance(other, Empty):
             pass
         elif isinstance(other, Value):
