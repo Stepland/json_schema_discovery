@@ -31,16 +31,16 @@ class Schema(ABC):
         ...
     
     @abstractmethod
-    def _merge(self, other):
+    def _merge_same_type(self, other):
         ...
     
-    def _merge_any(self, other):
+    def _merge(self, other):
         if isinstance(other, Empty):
             return self
         elif not isinstance(other, type(self)):
             return Variant((self, other))
         else:
-            return self._merge(other)
+            return self._merge_same_type(other)
 
     def _iter_statistics(self, depth=1):
         return []
@@ -69,7 +69,7 @@ class Schema(ABC):
                 other = make_schema(other)
             except ValueError:
                 return NotImplemented
-        return self._merge_any(other)
+        return self._merge(other)
 
     def __str__(self):
         return "\n".join(self._iter_strings(indent=1, show_counts=True))
@@ -119,10 +119,10 @@ class Empty(Schema):
     def count(self):
         return 0
 
-    def _merge_any(self, other):
-        return copy.copy(other)
-    
     def _merge(self, other):
+        return copy.deepcopy(other)
+    
+    def _merge_same_type(self, other):
         ...
 
     def _iter_strings(self, indent=1, show_counts=True):
@@ -156,7 +156,7 @@ class Value(CountableSchema):
     def __bool__(self):
         return True
 
-    def _merge(self, other):
+    def _merge_same_type(self, other):
         self.add_counts(other)
         return self
 
@@ -204,16 +204,15 @@ class DictStructure(CountableSchema):
     def __bool__(self):
         return bool(self.keys)
 
-    def _merge(self, other):
-        res = copy.copy(self)
-        res.add_counts(other)
+    def _merge_same_type(self, other):
+        self.add_counts(other)
         # merge each common key
-        for key in res.keys.keys() & other.keys.keys():
-            res[key] += other[key]
+        for key in self.keys.keys() & other.keys.keys():
+            self[key] += other[key]
         # add each new key
-        for key in other.keys.keys() - res.keys.keys():
-            res[key] = copy.copy(other[key])
-        return res
+        for key in other.keys.keys() - self.keys.keys():
+            self[key] = copy.copy(other[key])
+        return self
 
     def _iter_strings(self, indent=1, show_counts=True):
         if not (self):
@@ -273,13 +272,12 @@ class ListStructure(CountableSchema):
             return False
 
     def __bool__(self):
-        return bool(self.element_schema)
+        return self.element_schema != Empty()
 
-    def _merge(self, other):
-        res = copy.copy(self)
-        res.add_counts(other)
-        res.element_schema += other.element_schema
-        return res
+    def _merge_same_type(self, other):
+        self.add_counts(other)
+        self.element_schema += other.element_schema
+        return self
 
     def _iter_strings(self, indent=1, show_counts=True):
         if not (self):
@@ -347,44 +345,47 @@ class Variant(Schema):
             return False
 
     def __bool__(self):
-        return any((self.values, self.dicts, self.lists))
+        return bool(self.values) or (self.dicts != Empty()) or (self.lists != Empty())
 
     def __iter__(self):
         yield from self.values.values()
-        if self.dicts != Empty():
-            yield self.dicts
         if self.lists != Empty():
             yield self.lists
+        if self.dicts != Empty():
+            yield self.dicts
 
     @property
     def count(self):
         return sum(x.count for x in self)
     
-    def _merge(self, other):
-        ...
+    def _merge_same_type(self, other):
 
-    def _merge_any(self, other):
-        if isinstance(other, Empty):
-            pass
-        elif isinstance(other, Value):
-            if other.type in self.values:
-                self.values[other.type] += other
-            else:
-                self.values[other.type] = other
-        elif isinstance(other, ListStructure):
-            self.lists += other
-        elif isinstance(other, DictStructure):
-            self.dicts += other
-        elif isinstance(other, Variant):
-            # merge common types
-            for _type in self.values.keys() & other.values.keys():
-                self.values[_type] += other.values[_type]
-            # add new types
-            for _type in other.values.keys() - self.values.keys():
-                self.values[_type] = other.values[_type]
-            self.dicts += other.dicts
-            self.lists += other.dicts
+        # merge common types
+        for _type in (self.values.keys() & other.values.keys()):
+            self.values[_type] += other.values[_type]
+        # add new types
+        for _type in (other.values.keys() - self.values.keys()):
+            self.values[_type] = other.values[_type]
+
+        self.dicts += other.dicts
+        self.lists += other.lists
+
         return self
+
+    def _merge(self, other):
+        if isinstance(other, Variant):
+            return self._merge_same_type(other)
+        else:
+            if isinstance(other, Value):
+                if other.type in self.values:
+                    self.values[other.type] += other
+                else:
+                    self.values[other.type] = other
+            elif isinstance(other, ListStructure):
+                self.lists += other
+            elif isinstance(other, DictStructure):
+                self.dicts += other
+            return self
 
     def _iter_strings(self, indent=1, show_counts=True):
         if not (self):
