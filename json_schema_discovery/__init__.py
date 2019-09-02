@@ -337,7 +337,7 @@ class Variant(Schema):
     def __eq__(self, other):
         if isinstance(other, Variant):
             return (
-                self.value == other.values
+                self.values == other.values
                 and self.dicts == other.dicts
                 and self.lists == other.lists
             )
