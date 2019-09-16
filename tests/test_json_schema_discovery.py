@@ -1,6 +1,13 @@
 import random
 
-from json_schema_discovery import make_schema, Empty, DictStructure, ListStructure
+from json_schema_discovery import (
+    make_schema,
+    Empty,
+    DictStructure,
+    ListStructure,
+    Variant,
+    Value,
+)
 
 
 def test_merge_dict():
@@ -40,3 +47,25 @@ def test_merge_dict_list():
     assert isinstance(schema, ListStructure)
     assert isinstance(schema.element_schema, DictStructure)
     assert schema.element_schema["key"].count == sum(len(x) for x in lists)
+
+
+def test_merge_different_values():
+
+    schema = make_schema(1)
+    str_value = make_schema("2")
+
+    schema += str_value
+
+    assert isinstance(schema, Variant)
+    assert schema.values.keys() == set((int, str))
+    assert schema.count == 2
+
+
+def test_merge_same_values():
+
+    schema = make_schema(1)
+
+    schema += schema
+
+    assert isinstance(schema, Value)
+    assert schema.count == 2

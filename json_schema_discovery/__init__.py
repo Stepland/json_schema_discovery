@@ -22,19 +22,19 @@ class Schema(ABC):
 
     @property
     @abstractmethod
-    def count(self):
+    def count(self) -> int:
         ...
 
     @property
     @abstractmethod
-    def short_type_str(self):
+    def short_type_str(self) -> str:
         ...
-    
+
     @abstractmethod
-    def _merge_same_type(self, other):
+    def _merge_same_type(self, other: "Schema"):
         ...
-    
-    def _merge(self, other):
+
+    def _merge(self, other: "Schema") -> "Schema":
         if isinstance(other, Empty):
             return self
         elif not isinstance(other, type(self)):
@@ -42,14 +42,14 @@ class Schema(ABC):
         else:
             return self._merge_same_type(other)
 
-    def _iter_statistics(self, depth=1):
-        return []
+    def _iter_statistics(self, depth: int = 1):
+        return
 
-    def _iter_sub_statistics(self, depth=1):
+    def _iter_sub_statistics(self, depth: int = 1):
         for key, *info in self._iter_statistics(depth=depth - 1):
             yield (f"    {key}", *info)
-    
-    def statistics(self, **kwargs):
+
+    def statistics(self, **kwargs) -> None:
         """Get detailed statistics regarding type and frequencies"""
         print(
             tabulate.tabulate(
@@ -58,12 +58,12 @@ class Schema(ABC):
                 floatfmt=".3f",
             )
         )
-    
-    def dumps(self, indent=1, show_counts=True):
+
+    def dumps(self, indent=1, show_counts=True) -> str:
         """Dump structure as a string"""
         return "\n".join(self._iter_strings(indent=indent, show_counts=show_counts))
 
-    def __iadd__(self, other):
+    def __iadd__(self, other) -> "Schema":
         if not isinstance(other, Schema):
             try:
                 other = make_schema(other)
@@ -73,9 +73,10 @@ class Schema(ABC):
 
     def __str__(self):
         return "\n".join(self._iter_strings(indent=1, show_counts=True))
-    
+
     def __repr__(self):
         return self.short_type_str
+
 
 class CountableSchema(Schema):
 
@@ -86,13 +87,13 @@ class CountableSchema(Schema):
     """
 
     def __init__(self):
-        self._count = 1
+        self._count: int = 1
 
     @property
-    def count(self):
+    def count(self) -> int:
         return self._count
 
-    def add_counts(self, other):
+    def add_counts(self, other: 'CountableSchema') -> None:
         if isinstance(other, CountableSchema):
             self._count += other._count
 
@@ -103,7 +104,7 @@ class Empty(Schema):
     The empty structure, to be understood as "no schema can be inferred for now"
 
     Used for instance as the internal type of an empty list
-    Does NOT represent a null, that whould be a Value object where value.type == NoneType instead
+    Does NOT represent a null, that would be a Value object where value.type == NoneType instead
     """
 
     def __hash__(self):
@@ -116,10 +117,10 @@ class Empty(Schema):
         return False
 
     @property
-    def count(self):
+    def count(self) -> int:
         return 0
 
-    def _merge(self, other):
+    def _merge(self, other) -> Schema:
         return copy.deepcopy(other)
     
     def _merge_same_type(self, other):
@@ -129,7 +130,7 @@ class Empty(Schema):
         yield "<empty>"
 
     @property
-    def short_type_str(self):
+    def short_type_str(self) -> str:
         return str(self)
 
 
@@ -157,8 +158,11 @@ class Value(CountableSchema):
         return True
 
     def _merge_same_type(self, other):
-        self.add_counts(other)
-        return self
+        if self != other:
+            return Variant((self, other))
+        else:
+            self.add_counts(other)
+            return self
 
     def _iter_strings(self, indent=1, show_counts=True):
         yield _count(self, show_counts) + self.type.__name__
@@ -357,14 +361,14 @@ class Variant(Schema):
     @property
     def count(self):
         return sum(x.count for x in self)
-    
+
     def _merge_same_type(self, other):
 
         # merge common types
-        for _type in (self.values.keys() & other.values.keys()):
+        for _type in self.values.keys() & other.values.keys():
             self.values[_type] += other.values[_type]
         # add new types
-        for _type in (other.values.keys() - self.values.keys()):
+        for _type in other.values.keys() - self.values.keys():
             self.values[_type] = other.values[_type]
 
         self.dicts += other.dicts
