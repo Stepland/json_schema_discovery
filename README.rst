@@ -7,7 +7,8 @@ Quickstart
 ----------
 
 Start with ``Empty`` or by passing a python object to ``make_schema()``
-merge a schema onto another using ``+=`` (also accepts python objects on the right hand side)
+
+Merge a schema onto another using ``+=`` (also accepts python objects on the right hand side)
 
 Visualize the resulting schema with ``dumps()`` or by printing the object
 
